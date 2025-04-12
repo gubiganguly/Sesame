@@ -157,6 +157,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             if data.get("type") == "audio":
                 # Decode base64 audio
                 audio_bytes = base64.b64decode(data.get("data", ""))
+                logger.info(f"Received {len(audio_bytes)} bytes of audio from client")
+                
+                # If the length is zero or very small, there's a problem with the client recording
+                if len(audio_bytes) < 1000:
+                    logger.error(f"Audio data too small: {len(audio_bytes)} bytes")
+                    await websocket.send_json({"type": "error", "message": "Audio data too small"})
+                    continue
                 
                 # Get transcription from Whisper service
                 transcription = await connect_to_whisper(audio_bytes)
