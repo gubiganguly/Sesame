@@ -52,29 +52,26 @@ async def connect_to_whisper(audio_data):
     try:
         logger.info(f"Connecting to Whisper service at {WHISPER_SERVICE_URL}")
         async with websockets.connect(WHISPER_SERVICE_URL) as whisper_ws:
-            # Properly format the audio before sending
-            # Whisper service expects audio as binary data
+            # Use send() instead of send_bytes()
             await whisper_ws.send(audio_data)
             
-            # Give the service time to process before trying to receive
-            try:
-                # Wait for response with a timeout
-                response = await asyncio.wait_for(whisper_ws.recv(), timeout=10.0)
-                
-                # Parse the response
-                if isinstance(response, str):
+            # Receive the transcription response
+            response = await whisper_ws.recv()
+            logger.info(f"Received response from Whisper: {response}")
+            
+            # Parse JSON response if it's a string
+            if isinstance(response, str):
+                try:
                     result = json.loads(response)
-                    logger.info(f"Received text response from Whisper: {result}")
                     return result.get("text", "")
-                else:
-                    # Handle binary response if needed
-                    logger.info("Received binary response from Whisper")
-                    return ""
-                    
-            except asyncio.TimeoutError:
-                logger.error("Timeout waiting for Whisper response")
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON response: {response}")
+                    return response if response else ""
+            else:
+                # If it's binary data, just return empty string
+                logger.error("Received binary response from Whisper")
                 return ""
-                
+            
     except Exception as e:
         logger.error(f"Error connecting to Whisper service: {str(e)}")
         return ""
