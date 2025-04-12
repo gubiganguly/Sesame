@@ -38,7 +38,7 @@ app.add_middleware(
 )
 
 # Environment variables
-WHISPER_SERVICE_URL = os.getenv("WHISPER_SERVICE_URL", "ws://localhost:8001/ws/transcribe")
+WHISPER_SERVICE_URL = os.getenv("WHISPER_SERVICE_URL", "ws://localhost:8000/ws/transcribe")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # Global variables
@@ -52,20 +52,31 @@ async def connect_to_whisper(audio_data):
     try:
         logger.info(f"Connecting to Whisper service at {WHISPER_SERVICE_URL}")
         async with websockets.connect(WHISPER_SERVICE_URL) as whisper_ws:
-            # Send audio bytes directly to the WebSocket
-            await whisper_ws.send_bytes(audio_data)
+            # Properly format the audio before sending
+            # Whisper service expects audio as binary data
+            await whisper_ws.send(audio_data)
             
-            # Receive the transcription response
-            response = await whisper_ws.receive_json()
-            logger.info(f"Received response from Whisper: {response}")
-            
-            # Extract text from response based on Whisper service format
-            if "text" in response:
-                return response.get("text", "")
-            return ""
-            
+            # Give the service time to process before trying to receive
+            try:
+                # Wait for response with a timeout
+                response = await asyncio.wait_for(whisper_ws.recv(), timeout=10.0)
+                
+                # Parse the response
+                if isinstance(response, str):
+                    result = json.loads(response)
+                    logger.info(f"Received text response from Whisper: {result}")
+                    return result.get("text", "")
+                else:
+                    # Handle binary response if needed
+                    logger.info("Received binary response from Whisper")
+                    return ""
+                    
+            except asyncio.TimeoutError:
+                logger.error("Timeout waiting for Whisper response")
+                return ""
+                
     except Exception as e:
-        logger.error(f"Error connecting to Whisper service: {e}")
+        logger.error(f"Error connecting to Whisper service: {str(e)}")
         return ""
 
 async def generate_llm_response(text, client_id):
