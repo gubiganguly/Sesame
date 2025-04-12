@@ -13,13 +13,20 @@ async def test_whisper():
     
     print(f"Connecting to {uri} with {len(audio_data)} bytes of audio")
     
-    async with websockets.connect(uri) as websocket:
-        print("Connected, sending audio data...")
-        await websocket.send(audio_data)
-        print("Audio sent, waiting for response...")
-        
-        response = await websocket.recv()
-        print(f"Received response: {response}")
+    try:
+        async with websockets.connect(uri) as websocket:
+            print("Connected, sending audio data...")
+            
+            # Send as raw binary data
+            await websocket.send(audio_data)
+            print("Audio sent, waiting for response...")
+            
+            # Add a longer timeout
+            response = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+            print(f"Received response: {response}")
+            
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     # Create a simple test wave file if it doesn't exist
